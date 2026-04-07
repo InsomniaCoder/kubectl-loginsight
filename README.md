@@ -124,27 +124,51 @@ kubectl-loginsight --file /tmp/test.log --model qwen/qwen3.5-9b --base-url http:
 ## Example output
 
 ```
-➜ kubectl logs prometheus-prometheus-1 | kubectl-loginsight --model qwen/qwen3.5-9b --base-url http://localhost:1234/v1 -q "do you find any problem"
+kubectl logs prometheus-metrics-prometheus-1 | kubectl loginsight -q "do you find any problem?"
 ⚠  Logs truncated to 8192 tokens (oldest lines removed)
 
-Yes, I found several significant problems in these logs:
 
-## Critical Issues
+Yes, I found several problems in these logs. Here's my analysis:
 
-### 1. Rule Evaluation Failures (Most Severe)
-Multiple recording rules are consistently failing with the error:
+## **Critical Issues:**
+
+### 1. **Rule Evaluation Failures (Most Common)**
+Multiple recording rules are failing repeatedly with the same error:
+```
 "vector contains metrics with the same labelset after applying rule labels"
+```
 
-**Root Cause:** These rules are trying to add labels but multiple metrics end up with
-identical labelsets after transformation. Prometheus doesn't allow duplicate time series.
+**Affected Rules:**
+| Rule Group | Metric Name | Example Expression |
+|------------|-------------|-------------------|
+| node_timex_offset_seconds | `node_timex_offset_seconds` | `record: node_timex_offset_seconds` |
+| node_network_receive_errs_total | `node_network_receive_errs_total` | Simple record rule |
+| node_filesystem_free_bytes | `node_filesystem_free_bytes` | `record: node_filesystem_free_bytes` |
+| node_filesystem_readonly | `node_filesystem_readonly` | Simple record rule |
+| node_filesystem_avail_bytes | `node_filesystem_avail_bytes` | Uses `group_left (node)` with `pod_info` |
+| node_filesystem_size_bytes | `node_filesystem_size_bytes` | Uses `group_left (node)` with `pod_info` |
+| node_network_transmit_errs_total | `node_network_transmit_errs_total` | Simple record rule |
+| node_timex_maxerror_seconds | `node_timex_maxerror_seconds` | Simple record rule |
 
-### 2. Sample Dropped from Ingestion Errors
-3 samples were dropped due to conflicting values at the same timestamp for
-coredns_dns_responses_total:sum_rate2m
+### 2. **Data Ingestion Errors**
+```
+"Error on ingesting results from rule evaluation with different value but same timestamp"
+num_dropped=3
+```
+This affects: `coredns_dns_responses_total:sum_rate2m` (3 data points dropped)
 
-## Recommended Actions
-1. Fix Recording Rules — add unique identifiers to ensure each rule produces unique labelsets
-2. Review pod info joins — rules joining on pods need unique grouping keys
+## **Root Cause:**
+The recording rules are adding a common label (`grafanastack: xxx`) to metrics that already have overlapping label sets, causing Prometheus to reject them as they can't uniquely identify the resulting vectors.
 
-⏱  57.8s
+## **Impact:**
+- ❌ Rules NOT executing successfully
+- ❌ Metrics data will be missing in Prometheus
+- ❌ Grafana dashboards may show gaps or incorrect aggregations
+
+## **Recommended Fix:**
+1. Review each recording rule file at `/etc/prometheus/rules/...`
+2. Add `__name__` label to ensure uniqueness OR use different metric names
+3. Consider adding additional distinguishing labels before the common labels are applied
+4. Verify that source metrics don't have conflicting label combinations
+⏱  53.8s
 ```
