@@ -134,9 +134,9 @@ Yes, I found several problems in these logs. Here's my analysis:
 
 ### 1. **Rule Evaluation Failures (Most Common)**
 Multiple recording rules are failing repeatedly with the same error:
-```
+
 "vector contains metrics with the same labelset after applying rule labels"
-```
+
 
 **Affected Rules:**
 | Rule Group | Metric Name | Example Expression |
